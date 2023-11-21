@@ -1,0 +1,86 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+contract EnhancedStorageETH {
+    address public owner;
+    string public storedData;
+    uint256 public creationTimestamp;
+    bool public isLocked;
+    address public pendingOwner;
+    bool public isDataDeleted;
+
+    event DataStored(address indexed user, string data, uint256 timestamp);
+    event DataDeleted(address indexed deleter, uint256 timestamp);
+    event LockStatusChanged(bool isLocked);
+    event OwnershipTransferInitiated(address indexed currentOwner, address indexed newOwner);
+    event OwnershipTransferCompleted(address indexed previousOwner, address indexed newOwner);
+    event ContractDestroyed(address indexed destroyer, uint256 timestamp);
+
+    modifier onlyOwner() {
+        require(msg.sender == owner, "Only the owner can call this function");
+        _;
+    }
+
+    modifier notLocked() {
+        require(!isLocked, "Contract is locked and data cannot be modified");
+        _;
+    }
+
+    modifier onlyPendingOwner() {
+        require(msg.sender == pendingOwner, "Only the pending owner can complete the transfer");
+        _;
+    }
+
+    constructor() {
+        owner = msg.sender;
+        creationTimestamp = block.timestamp;
+        isLocked = false;
+        isDataDeleted = false;
+    }
+
+    function set(string memory newData) external onlyOwner notLocked {
+        storedData = newData;
+        emit DataStored(msg.sender, newData, block.timestamp);
+    }
+
+    function get() external view returns (string memory) {
+        return storedData;
+    }
+
+    function deleteData() external onlyOwner notLocked {
+        isDataDeleted = true;
+        emit DataDeleted(msg.sender, block.timestamp);
+    }
+
+    function revokeDelete() external onlyOwner {
+        isDataDeleted = false;
+    }
+
+    function lockContract() external onlyOwner {
+        isLocked = true;
+        emit LockStatusChanged(true);
+    }
+
+    function unlockContract() external onlyOwner {
+        isLocked = false;
+        emit LockStatusChanged(false);
+    }
+
+    function initiateOwnershipTransfer(address newOwner) external onlyOwner {
+        require(newOwner != address(0), "Invalid new owner address");
+        pendingOwner = newOwner;
+        emit OwnershipTransferInitiated(owner, newOwner);
+    }
+
+    function completeOwnershipTransfer() external onlyPendingOwner {
+        address previousOwner = owner;
+        owner = pendingOwner;
+        pendingOwner = address(0);
+        emit OwnershipTransferCompleted(previousOwner, owner);
+    }
+
+    function destroyContract() external onlyOwner {
+        emit ContractDestroyed(msg.sender, block.timestamp);
+        selfdestruct(payable(owner));
+    }
+}
