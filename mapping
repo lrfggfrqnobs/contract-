@@ -1,0 +1,54 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
+
+contract CrossChainBridge is Ownable {
+    using EnumerableSet for EnumerableSet.Bytes32Set;
+
+    IERC20 public token;
+    EnumerableSet.Bytes32Set private processedTransactions;
+
+    event TransferInitiated(address indexed from, address indexed to, uint256 amount, uint256 nonce, bytes32 transactionHash);
+    event TransferCompleted(address indexed to, uint256 amount, bytes32 transactionHash);
+
+    constructor(address _token) {
+        token = IERC20(_token);
+    }
+
+    modifier notProcessed(bytes32 transactionHash) {
+        require(!processedTransactions.contains(transactionHash), "Transaction already processed");
+        _;
+    }
+
+    function initiateTransfer(address to, uint256 amount, uint256 nonce) external onlyOwner {
+        bytes32 transactionHash = getTransactionHash(to, amount, nonce);
+
+        // Lock tokens in this contract
+        token.transferFrom(msg.sender, address(this), amount);
+
+        // Emit an event to notify the other chain about the transfer
+        emit TransferInitiated(msg.sender, to, amount, nonce, transactionHash);
+    }
+
+    function completeTransfer(address to, uint256 amount, bytes32 transactionHash) external onlyOwner notProcessed(transactionHash) {
+        // Release tokens to the recipient on the other chain
+        token.transfer(to, amount);
+
+        // Mark the transaction as processed to prevent replay attacks
+        processedTransactions.add(transactionHash);
+
+        // Emit an event to notify the other chain about the completion
+        emit TransferCompleted(to, amount, transactionHash);
+    }
+
+    function setToken(address _token) external onlyOwner {
+        token = IERC20(_token);
+    }
+
+    function getTransactionHash(address to, uint256 amount, uint256 nonce) public pure returns (bytes32) {
+        return keccak256(abi.encodePacked(to, amount, nonce));
+    }
+}
