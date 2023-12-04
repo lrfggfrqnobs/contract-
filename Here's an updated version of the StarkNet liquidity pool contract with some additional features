@@ -1,0 +1,78 @@
+import starknet;
+
+contract LiquidityPool {
+    starknet.StorageSlot!({user: felt, tokenA_balance: felt, tokenB_balance: felt});
+
+    public (user: felt) func initialize() {
+        // Initialize the contract
+        self.storage.user = tx.origin;
+        self.storage.tokenA_balance = 0;
+        self.storage.tokenB_balance = 0;
+    }
+
+    public (tokenA_amount: felt, tokenB_amount: felt) func addLiquidity(tokenA_amount: felt, tokenB_amount: felt) {
+        // Add liquidity
+        self.storage.tokenA_balance += tokenA_amount;
+        self.storage.tokenB_balance += tokenB_amount;
+    }
+
+    public (tokenA_amount: felt, tokenB_amount: felt) func removeLiquidity() {
+        // Remove liquidity
+        assert(self.storage.user == tx.origin, "Not the liquidity provider");
+        let tokenA_amount = self.storage.tokenA_balance;
+        let tokenB_amount = self.storage.tokenB_balance;
+        self.storage.tokenA_balance = 0;
+        self.storage.tokenB_balance = 0;
+    }
+
+    public (tokenA_balance: felt, tokenB_balance: felt) view func getLiquidity() -> (felt, felt) {
+        // Get current liquidity
+        return (self.storage.tokenA_balance, self.storage.tokenB_balance);
+    }
+
+    public (tokenB_received: felt) func swapTokenAForTokenB(tokenA_amount: felt) {
+        // Swap token A for token B
+        assert(self.storage.tokenA_balance >= tokenA_amount, "Insufficient liquidity");
+        let tokenB_amount = calculateSwapAmount(tokenA_amount);
+        self.storage.tokenA_balance -= tokenA_amount;
+        self.storage.tokenB_balance += tokenB_amount;
+    }
+
+    public (tokenA_received: felt) func swapTokenBForTokenA(tokenB_amount: felt) {
+        // Swap token B for token A
+        assert(self.storage.tokenB_balance >= tokenB_amount, "Insufficient liquidity");
+        let tokenA_amount = calculateSwapAmount(tokenB_amount);
+        self.storage.tokenB_balance -= tokenB_amount;
+        self.storage.tokenA_balance += tokenA_amount;
+    }
+
+    public (tokenB_amount: felt) func calculateSwapAmount(tokenA_amount: felt) -> felt {
+        // Calculate the amount of token B to be received when swapping A
+        // You can use your own swapping algorithm here
+        return tokenA_amount * 2;
+    }
+
+    public (tokenA_amount: felt) func calculateSwapAmountReverse(tokenB_amount: felt) -> felt {
+        // Calculate the amount of token A to be received when swapping B
+        // You can use your own swapping algorithm here
+        return tokenB_amount * 2;
+    }
+
+    public (tokenA_amount: felt, tokenB_amount: felt) func rebalance() {
+        // Rebalance the liquidity to maintain a certain ratio
+        let targetRatio = 2; // You can adjust this ratio based on your needs
+        let currentRatio = self.storage.tokenA_balance / self.storage.tokenB_balance;
+
+        if (currentRatio > targetRatio) {
+            // Too much token A, swap some for token B
+            let tokenA_to_swap = self.storage.tokenA_balance - self.storage.tokenB_balance * targetRatio;
+            let tokenB_received = calculateSwapAmount(tokenA_to_swap);
+            swapTokenAForTokenB(tokenA_to_swap);
+        } else if (currentRatio < targetRatio) {
+            // Too much token B, swap some for token A
+            let tokenB_to_swap = self.storage.tokenB_balance - self.storage.tokenA_balance / targetRatio;
+            let tokenA_received = calculateSwapAmountReverse(tokenB_to_swap);
+            swapTokenBForTokenA(tokenB_to_swap);
+        }
+    }
+}
